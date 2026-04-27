@@ -25,6 +25,12 @@ This is **not** a reinterpretation, reskin, or feature expansion. It should feel
 
 These are the **best conservative selections** for the concept.
 
+### 0. Reference Version
+This implementation targets **Windows 95/98 Minesweeper** as the canonical reference.
+- Board presets, control scheme, timer format, mine counter behavior, and flagging rules follow that version.
+- When "classic" is referenced in this document, it means this version.
+- Ambiguities should be resolved by testing against the reference version's behavior.
+
 ### 1. Gameplay Fidelity
 The game must preserve the classic Minesweeper rule set:
 - Hidden mines are distributed on the board.
@@ -36,9 +42,11 @@ The game must preserve the classic Minesweeper rule set:
 
 ### 2. Board Presets
 The game should include the classic difficulty presets:
-- **Beginner:** 9 × 9, 10 mines
-- **Intermediate:** 16 × 16, 40 mines
-- **Expert:** 30 × 16, 99 mines
+- **Beginner:** 9 × 9 (width × height), 10 mines
+- **Intermediate:** 16 × 16 (width × height), 40 mines
+- **Expert:** 30 × 16 (width × height), 99 mines
+
+*Convention: All dimensions are stated as width × height.*
 
 No custom board editor is required in the initial version.
 
@@ -50,6 +58,16 @@ The game should be **desktop-first** to remain faithful to the original.
 
 Mobile-first control schemes are out of scope for the initial version.
 
+**Adjacency Definition (Critical):**
+- **Mine counting on a tile:** Adjacent mines are counted in **8 directions** (orthogonal + diagonal).
+- **Flood reveal expansion:** Uses **4 directions** (orthogonal only; no diagonals).
+- **Chord action adjacency:** Both flagged tile detection and unrevealed tile targets use **8 directions**.
+
+**Input Edge Cases:**
+- Left-click on a flagged tile: **no-op** (tile remains flagged, no reveal).
+- Right-click on an already-revealed tile: **no-op** (cannot flag revealed tiles).
+- Double-click: Not assigned any function; treat as two separate clicks.
+
 ### 4. First Click Safety
 Adopt a **safe first click** rule.
 
@@ -59,10 +77,11 @@ Rationale:
 - It is widely accepted in modern Minesweeper implementations.
 - It does not materially change the core game loop.
 
-Conservative interpretation:
-- The first revealed tile must never be a mine.
-- No stronger guarantee is required initially.
-- The implementation does **not** need to guarantee a zero-valued first click unless that falls out naturally from implementation.
+Implementation detail:
+- Mine placement is **deferred until after the first click**.
+- The player clicks a hidden tile; the board is generated such that the clicked tile is safe (not a mine).
+- This ensures no mine can ever occupy the first-clicked location, regardless of RNG.
+- After the first click, the board is locked and no mines are relocated.
 
 ### 5. UI Faithfulness
 The application should include the classic Minesweeper structural elements:
@@ -115,65 +134,87 @@ The user must be able to select one of the three classic difficulty presets:
 - Intermediate
 - Expert
 
-Changing difficulty must generate a new board using the selected preset.
+Difficulty can be changed **only before first click or after game end** (win/loss). Clicking the reset button applies the current difficulty selection. Changing difficulty mid-game is not allowed; the player must complete or reset the current game first.
 
 ### FR-3: Board Generation
 The game must generate a minefield for the selected difficulty.
 - Mine count must match the preset.
 - Grid dimensions must match the preset.
-- The first revealed tile must be safe.
+- The first revealed tile must be safe (not a mine); **this does NOT guarantee zero adjacent mines**.
+- Before the first click, all tiles are rendered visually as hidden/unrevealed.
 
 ### FR-4: Tile Reveal
 When a hidden, non-flagged tile is revealed:
 - If it contains a mine, the game ends in loss.
 - If it has one or more adjacent mines, its number is displayed.
-- If it has zero adjacent mines, neighboring empty region tiles are revealed automatically.
+- If it has zero adjacent mines, automatically reveal all orthogonally adjacent tiles (up, down, left, right) that are hidden and non-flagged. Repeat recursively for any newly-revealed zero-value tiles.
+  - *Note: Orthogonal adjacency means 4 directions, not 8. Diagonals are NOT included in the flood reveal.*
 
 ### FR-5: Flagging
-The player must be able to toggle a flag on hidden tiles.
-- Flags prevent accidental reveal through standard click behavior.
-- Flag count should affect the mine counter display in the classic way.
+The player must be able to toggle a flag on hidden tiles only.
+- Flagging is only allowed on tiles that are currently hidden (not yet revealed).
+- Right-click on a hidden tile toggles the flag state: unflagged → flagged, flagged → unflagged.
+- Right-click on a revealed tile is a **no-op** (cannot flag revealed tiles).
+- Flags prevent accidental reveal through standard left-click behavior.
+- Left-click on a flagged tile is a **no-op** (tile remains flagged; no reveal occurs).
+- Flag count should affect the mine counter display (current mine count = total mines - flags placed).
 
 ### FR-6: Chording
 The player must be able to chord on a revealed numbered tile.
-- If the number of adjacent flagged tiles equals the tile number, unrevealed adjacent non-flagged tiles are revealed.
-- If any such revealed tile contains a mine, the game ends in loss.
+- Chording is performed by clicking on a revealed tile that displays a number.
+- If the count of **flagged** tiles orthogonally adjacent to the clicked tile equals the tile's number, then all unrevealed non-flagged tiles orthogonally adjacent to that tile are automatically revealed.
+- If any of those revealed tiles contains a mine, the game ends in loss.
+- *Note: Chord checks only the flag count, not flag correctness. If flags are placed on incorrect tiles but the count matches, the chord still fires.*
 
 ### FR-7: Game End States
 The game must support:
-- **Win:** all non-mine tiles revealed
-- **Loss:** mine revealed
+- **Win:** all non-mine tiles have been revealed (flagged or unflagged state is irrelevant).
+- **Loss:** a mine is revealed by any action (left-click or chord).
 
 On loss:
-- mines should be revealed clearly
-- incorrectly flagged tiles may be shown distinctly if desired
+- **All unrevealed mines must be revealed immediately.** Show them clearly so the player understands the board state.
+- Optionally, incorrectly flagged tiles (flags placed on non-mine tiles) may be shown distinctly (e.g., crossed-out flag), but this is not required.
+- The board becomes non-interactive: tiles cannot be clicked or flagged.
 
 On win:
-- the board should be visually frozen
-- the timer should stop
-- remaining unflagged mines may optionally auto-flag, but this is not required
+- The board becomes visually frozen / non-interactive.
+- The timer stops immediately.
+- All non-revealed tiles remain hidden (no auto-reveal of mines).
+- The reset button should visually change to a "win" state if feasible (e.g., smiley face with sunglasses).
 
 ### FR-8: Timer
 The UI must include a timer.
-- Timer starts on the first reveal.
-- Timer stops on win or loss.
-- Display format should be simple and classic in spirit.
+- **Before first click:** Timer displays "000".
+- Timer starts incrementing on the **first left-click reveal** (not on flag placement or other interactions).
+- Timer stops incrementing on win or loss.
+- Timer counts in seconds, starting from 0.
+- Timer caps at 999 seconds (displays "999" and does not increment further).
+- Display format: simple numeric with leading zeros (e.g., "000", "123", "045"), no colon or "seconds" suffix needed.
 
 ### FR-9: Mine Counter
 The UI must include a mine counter.
-- Initial value matches total mine count for the board.
-- Counter updates based on placed flags.
-- Exact legacy behavior for negative counts is optional, but acceptable if implemented.
+- Initial value matches the total mine count for the board.
+- Counter formula: `total mines - flags placed`.
+- Counter updates immediately when a flag is placed or removed.
+- Counter must **never display a negative value**. If flags exceed mines (player places more flags than the mine count), the counter displays **0**.
+- Display format: simple numeric (e.g., "010"), using leading zeros if needed to match classic display width.
 
 ### FR-10: Reset Control
 The UI must include a reset control modeled after the classic face button.
-- Clicking it starts a new game using the current difficulty.
+- Clicking it immediately starts a new game using the current difficulty.
+- Any in-progress game is discarded; the timer resets to "000".
 - The button may visually change state for normal / pressed / win / loss if desired.
 
 ### FR-11: Prevent Browser Friction
 The app must suppress browser behaviors that interfere with play where reasonable.
-- Right click on the board should not open the browser context menu.
-- Input handling should feel immediate and predictable.
+- Right-click on board tiles must not open the browser's context menu (use `preventDefault()` on `contextmenu` events within the game board).
+- Left-click and right-click on tiles should be processed immediately without delay.
+- Outside the board area (header, difficulty buttons, reset button), browser context menu is acceptable.
+
+### FR-12: Keyboard Support
+Keyboard support is **not required** in the initial version.
+- The game must be fully playable using only mouse: left-click and right-click.
+- Keyboard shortcuts (arrow keys, Enter, Space) are out of scope for v1 and may be added in future versions if desired.
 
 ---
 
@@ -225,6 +266,30 @@ Not allowed:
 
 ### VR-3: Number Presentation
 Adjacent-mine numbers should use recognizable color coding aligned with player expectations.
+Reference color scheme (Windows 95 Minesweeper):
+- 1 = Blue
+- 2 = Green
+- 3 = Red
+- 4 = Dark Blue
+- 5 = Maroon
+- 6 = Teal/Cyan
+- 7 = Black
+- 8 = Gray
+
+*Modern web colors may be adapted for readability, but should maintain the recognizable intent of the classic scheme.*
+
+### VR-4: Tile Visual States
+Each tile must clearly display its state. Required states:
+- **Hidden:** raised/beveled appearance, indicating an unrevealed tile (clickable)
+- **Revealed (empty):** flat, pressed appearance; shows blank/empty (no number)
+- **Revealed (numbered):** flat, pressed appearance; shows number 1–8 in the appropriate color
+- **Flagged (hidden):** raised/beveled appearance with a flag icon or symbol overlaid
+- **Mine (revealed on loss):** flat appearance with mine icon/symbol, clearly visible
+- **Incorrectly flagged (on loss, optional):** flagged state with a visual distinction (e.g., crossed-out flag, different color)
+
+Hover/active states are optional but recommended for better UX:
+- Hidden tiles may appear slightly different on hover (e.g., brighter bevel) to indicate interactivity.
+- No visual feedback is required when hovering over revealed or flagged tiles.
 
 ---
 
