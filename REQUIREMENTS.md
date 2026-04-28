@@ -21,6 +21,27 @@ This is **not** a reinterpretation, reskin, or feature expansion. It should feel
 
 ---
 
+## Checkpoint: Player Goal
+
+**The player must reveal all non-mine tiles on the board to win.**
+
+- Flagging is a helper mechanism but not required to win.
+- Winning condition: 100% of non-mine tiles revealed.
+- Losing condition: any mine tile revealed.
+
+---
+
+## Checkpoint: Game Loop
+
+1. **Initialization:** Player selects difficulty. Board renders as hidden. Timer shows "000". Mine counter shows total mines.
+2. **First Click:** Player left-clicks. Mines are generated (clicked tile guaranteed safe). Board state becomes "active". Timer starts.
+3. **Active Play:** Left-click reveals tiles. Right-click flags tiles. Board updates real-time. Timer increments.
+4. **Win:** All non-mine tiles revealed → board freezes, timer stops, reset button shows "win" state.
+5. **Loss:** Any mine revealed → all unrevealed mines shown, board freezes, timer stops, reset button shows "loss" state.
+6. **Reset:** Click reset → new game starts with current difficulty.
+
+---
+
 ## Core Product Decisions
 
 These are the **best conservative selections** for the concept.
@@ -50,23 +71,28 @@ The game should include the classic difficulty presets:
 
 No custom board editor is required in the initial version.
 
-### 3. Input Model
-The game should be **desktop-first** to remain faithful to the original.
-- **Left click:** reveal tile
-- **Right click:** place/remove flag
-- **Chord action:** supported on revealed numbered tiles when surrounding flags match the number
+### 3. Input Model & Control Scheme (Checkpoint)
 
-Mobile-first control schemes are out of scope for the initial version.
+The game is **desktop-first**, mouse-driven, Windows 95/98 Minesweeper control scheme.
+
+**Primary Controls:**
+- **Left click on hidden tile:** Reveal tile. Mine = lose. Adjacent mines shown. Zero-adjacent triggers flood reveal.
+- **Right click on hidden tile:** Toggle flag.
+- **Left click on revealed numbered tile:** Chord action (if flagged-adjacent-count == number, reveal all non-flagged adjacent).
+- **Left click on reset button:** New game, current difficulty.
+- **Left click on difficulty selector:** Change difficulty (only before first click or after game end).
 
 **Adjacency Definition (Critical):**
-- **Mine counting on a tile:** Adjacent mines are counted in **8 directions** (orthogonal + diagonal).
-- **Flood reveal expansion:** Uses **4 directions** (orthogonal only; no diagonals).
-- **Chord action adjacency:** Both flagged tile detection and unrevealed tile targets use **8 directions**.
+- **Mine counting on a tile:** **8 directions** (orthogonal + diagonal).
+- **Flood reveal expansion:** **4 directions** (orthogonal only; no diagonals).
+- **Chord action adjacency:** **8 directions**.
 
 **Input Edge Cases:**
-- Left-click on a flagged tile: **no-op** (tile remains flagged, no reveal).
-- Right-click on an already-revealed tile: **no-op** (cannot flag revealed tiles).
-- Double-click: Not assigned any function; treat as two separate clicks.
+- Left-click on flagged tile: **no-op** (remains flagged).
+- Right-click on revealed tile: **no-op** (cannot flag).
+- Right-click outside board: browser context menu allowed.
+- Double-click: not assigned (treat as two clicks).
+- Keyboard: not supported in v1.
 
 ### 4. First Click Safety
 Adopt a **safe first click** rule.
@@ -293,6 +319,30 @@ Hover/active states are optional but recommended for better UX:
 
 ---
 
+## Checkpoint: Browser Assumptions
+
+**Supported Browsers:**
+- Modern desktop browsers: Chrome, Firefox, Safari, Edge (ES6+ JavaScript).
+- Desktop-only (mobile out of scope for v1).
+
+**Required Capabilities:**
+- DOM manipulation.
+- CSS flexbox/grid for layout.
+- JavaScript event handling (click, contextmenu).
+- No canvas, WebGL, or advanced APIs required.
+- LocalStorage not required (no persistence).
+
+**Browser Behaviors Suppressed:**
+- Right-click context menu on board tiles (preventDefault on contextmenu).
+- Text selection on tiles (user-select: none in CSS).
+
+**No Backend:**
+- Static front-end only.
+- No server, database, or authentication.
+- All game state client-side and volatile.
+
+---
+
 ## Technical Scope Requirements
 
 ### TS-1: Static Front-End App
@@ -317,19 +367,57 @@ At any moment, the game should have a clear internal state:
 
 ---
 
-## Non-Goals
+## Checkpoint: Acceptance Criteria
 
-The following are explicitly out of scope for the first version:
-- mobile-optimized controls
-- accessibility deep pass beyond basic semantic care
-- custom map creation
-- solvability guarantees beyond safe first click
-- no-guess puzzle generation
-- save/load system
-- statistics dashboard
-- online competition
-- daily puzzle rotation
-- alternate skins or game themes
+**Project Complete When:**
+
+1. ✅ **Player Goal:** Player can win by revealing all non-mine tiles without hitting a mine.
+2. ✅ **Game Loop:** Initialization → First Click → Active Play → Win/Loss → Reset is fully functional.
+3. ✅ **All In-Scope Features:** FR-1 through FR-12 and all VR/UX requirements implemented and tested.
+4. ✅ **Control Scheme:** Left-click/right-click work. Chord works. Reset/difficulty selector work. All no-ops behave correctly.
+5. ✅ **Visual Requirements:** All 6 tile states visually distinct. Numbers use classic color scheme. UI is retro-inspired, board centered.
+6. ✅ **Game State Correct:** Mine counter never negative. Timer displays correctly (000 before first click, increments, caps at 999). Win/loss detection correct.
+7. ✅ **Browser Behavior:** Context menu suppressed on board. Game runs in modern desktop browsers. No backend.
+8. ✅ **No Out-of-Scope:** Keyboard, mobile controls, save/load, audio, achievements absent.
+9. ✅ **Code Quality:** Game state explicit and testable. Lightweight, simple architecture.
+10. ✅ **QA Tested:** All three difficulties tested. Win/loss/timer/counter/flood/chord/reset all verified.
+
+---
+
+## Checkpoint: In-Scope Features (Committed)
+
+**Core Gameplay:**
+- Tile reveal with mine detection and flood reveal (FR-4)
+- Flagging system (FR-5)
+- Chord action (FR-6)
+- Three difficulty presets: Beginner 9×9-10, Intermediate 16×16-40, Expert 30×16-99 (FR-2)
+- Safe first click (FR-3)
+- Win/loss detection and end-game states (FR-7)
+- Timer: starts on first click, caps at 999s, displays with leading zeros (FR-8)
+- Mine counter: total mines - flags, clamps to 0 (FR-9)
+- Reset button (FR-10)
+- Difficulty selector (before first click or after game end) (FR-2)
+- Single-page layout (FR-1)
+- Context menu suppression on board (FR-11)
+
+**UI/UX:**
+- Tile visual states: hidden, revealed-empty, revealed-numbered, flagged, mine, incorrectly-flagged (VR-4)
+- Classic color scheme for numbers 1–8 (VR-3)
+- Retro-inspired UI with beveled edges (VR-1, VR-2)
+- Board centered and immediately readable (UX-1, UX-2)
+
+## Checkpoint: Out-of-Scope Features (Explicitly Rejected)
+
+- Keyboard shortcuts or navigation
+- Mobile-optimized controls
+- Custom map creation
+- Save/load or persistence
+- Statistics or leaderboards
+- Accessibility deep pass
+- Audio or elaborate animations
+- Power-ups, hints, achievements
+- Multiple screens, accounts, monetization
+- Themes or skins
 
 ---
 
