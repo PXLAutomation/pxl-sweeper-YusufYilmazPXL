@@ -428,3 +428,11 @@ The first version should be understood as:
 > A small, one-page, desktop-first browser version of classic Minesweeper with classic board sizes, classic controls, classic UI structure, safe first click, and no extra mechanics.
 
 This is the baseline to protect during implementation. Any new idea should be rejected unless it clearly strengthens authenticity, clarity, or usability **without** moving the game away from classic Minesweeper.
+
+## Project Setup Requirements
+
+- The project shall include a `package.json` file in the repository root.
+- The `package.json` file shall define the project's runnable commands in a consistent way.
+- The `package.json` file shall include at least a `test` script so the same test command can be run every time.
+- If the project uses ES module imports in JavaScript, `package.json` shall set `"type": "module"`.
+- The project shall remain compatible with a plain JavaScript, static-site workflow.
